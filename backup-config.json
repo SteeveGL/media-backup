@@ -1,0 +1,22 @@
+{
+  "s3_bucket": "my-backup-bucket",
+  "skip_errors": false,
+  "backups": [
+    {
+      "source": "/path/to/photos",
+      "destination": "photos",
+      "exclude": [
+        "*.tmp",
+        ".thumbs"
+      ]
+    },
+    {
+      "source": "/path/to/documents",
+      "destination": "docs",
+      "exclude": [
+        ".git",
+        "node_modules"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# PyYAML - Optional, for YAML config parsing
+# If not installed, the tool will fall back to JSON
+PyYAML==6.0
