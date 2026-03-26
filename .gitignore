@@ -24,8 +24,7 @@ Thumbs.db
 aws_credentials
 
 # Local config variations
-backup-config-*.yaml
-backup-config-local.yaml
+backup-config.json
 
 # Logs
 *.log
