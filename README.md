@@ -1,11 +1,11 @@
 # Media Backup Tool
 
-A minimal, lightweight backup tool for syncing directories to AWS S3 using AWS CLI.
+A minimal PowerShell backup tool for syncing directories to AWS S3 using AWS CLI.
 
 ## Features
 
-- **Minimal dependencies**: Only requires Python 3.6+ and AWS CLI
-- **Simple configuration**: YAML or JSON config files
+- **Minimal dependencies**: Only requires PowerShell and AWS CLI (no runtimes)
+- **Simple configuration**: JSON config files
 - **Selective syncing**: Exclude patterns support (.tmp, node_modules, etc.)
 - **Safe deletion**: Optional removal of deleted files from S3
 - **Error handling**: Skip errors and continue, or abort on first failure
@@ -13,69 +13,72 @@ A minimal, lightweight backup tool for syncing directories to AWS S3 using AWS C
 
 ## Prerequisites
 
-1. **Python 3.6+**
-   ```bash
-   python --version
+1. **PowerShell 5.0+** (built-in on Windows)
+   ```powershell
+   $PSVersionTable.PSVersion
    ```
 
 2. **AWS CLI** (version 1.x or 2.x)
-   ```bash
-   # Install or update AWS CLI:
+   ```powershell
+   # Install:
    # Windows: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-   # macOS/Linux: pip install --upgrade awscli
+   # Or via Chocolatey: choco install awscli
+   # Or via Scoop: scoop install aws
    
    # Verify installation:
    aws --version
    ```
 
 3. **AWS Credentials** configured locally
-   ```bash
+   ```powershell
    # Run this and enter your AWS Access Key ID and Secret Access Key
    aws configure
    ```
 
 ## Installation
 
-1. **Clone or download this repository**
-
-2. (**Optional**) Install PyYAML for YAML support:
-   ```bash
-   pip install -r requirements.txt
-   ```
-   > Without PyYAML, the tool will automatically fall back to JSON format
+Just clone or download this repository. No additional dependencies needed beyond AWS CLI.
 
 ## Usage
 
 ### 1. Configure your backups
 
-Edit [backup-config.yaml](backup-config.yaml) and specify:
+Edit [backup-config.json](backup-config.json) and specify:
 - Your S3 bucket name
 - Source directories to backup
 - Optional: exclude patterns and S3 destination paths
 
 Example:
-```yaml
-s3_bucket: "my-media-backup"
-
-backups:
-  - source: "C:\\Users\\Me\\Pictures"
-    destination: "pictures"
-    exclude:
-      - "*.tmp"
-      - "Thumbs.db"
-
-  - source: "C:\\Users\\Me\\Documents"
-    destination: "docs"
+```json
+{
+  "s3_bucket": "my-media-backup",
+  "skip_errors": false,
+  "backups": [
+    {
+      "source": "C:\\Users\\Me\\Pictures",
+      "destination": "pictures",
+      "exclude": ["*.tmp", "Thumbs.db"]
+    },
+    {
+      "source": "C:\\Users\\Me\\Documents",
+      "destination": "docs",
+      "exclude": []
+    }
+  ]
+}
 ```
 
 ### 2. Run the backup
 
-```bash
-# Use default config file (backup-config.yaml)
-python backup.py
+```powershell
+# Use default config file (backup-config.json)
+.\backup-aws.ps1
 
 # Or specify a custom config file
-python backup.py my-backup-config.yaml
+.\backup-aws.ps1 -ConfigFile my-backup-config.json
+
+# Allow script execution (first time only)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
 ### 3. Monitor the output
@@ -91,24 +94,25 @@ Number of directories: 2
 ✓ Backup successful
 
 ------------------------------------------------------------
-✓ All backups completed successfully
+Completed: 2 successful, 0 failed
 ```
 
 ## Configuration
 
 ### Config File Format
 
-```yaml
-s3_bucket: "bucket-name"          # Required: S3 bucket name
-skip_errors: false                # Optional: continue on errors (default: false)
-
-backups:
-  - source: "/local/path"         # Required: local directory path
-    destination: "s3-key"          # Optional: S3 path (defaults to directory name)
-    exclude:                       # Optional: exclude patterns
-      - "*.tmp"
-      - ".git"
-      - "node_modules"
+```json
+{
+  "s3_bucket": "bucket-name",     // Required: S3 bucket name
+  "skip_errors": false,           // Optional: continue on errors (default: false)
+  "backups": [
+    {
+      "source": "C:\\local\\path",      // Required: local directory path
+      "destination": "s3-key",          // Required: S3 path (no "/" prefix)
+      "exclude": ["*.tmp", ".git"]      // Optional: exclude patterns
+    }
+  ]
+}
 ```
 
 ### Configuration Options
@@ -118,16 +122,17 @@ backups:
 | `s3_bucket` | string | Yes | AWS S3 bucket name |
 | `skip_errors` | boolean | No | Continue on backup failures (default: false) |
 | `source` | string | Yes | Local directory path (absolute or relative) |
-| `destination` | string | No | S3 key/path (defaults to directory name) |
-| `exclude` | list | No | Glob patterns to exclude from sync |
+| `destination` | string | Yes | S3 key/path (no leading slash) |
+| `exclude` | array | No | Glob patterns to exclude from sync |
 
 ## AWS CLI Options
 
 The tool uses `aws s3 sync` with these defaults:
 - `--delete`: Removes files from S3 that are no longer in the local directory
-- Custom exclude patterns per backup
 
-To see advanced options, check [AWS S3 sync documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html#using-s3-commands-managing-objects-sync).
+To add advanced options, edit [backup-aws.ps1](backup-aws.ps1) line that builds the `$cmd` array.
+
+Check [AWS S3 sync documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html#using-s3-commands-managing-objects-sync) for more options.
 
 ## Scheduling Backups
 
@@ -137,46 +142,51 @@ To see advanced options, check [AWS S3 sync documentation](https://docs.aws.amaz
 2. Create Basic Task
 3. Set trigger (e.g., daily at 2 AM)
 4. Action: Start a program
-   - Program: `C:\Python311\python.exe` (your Python path)
-   - Arguments: `C:\path\to\backup.py C:\path\to\backup-config.yaml`
+   - Program: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+   - Arguments: `-NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup-aws.ps1"`
    - Start in: `C:\path\to\media-backup`
 
-### Linux/macOS Cron
-
-```bash
-# Daily backup at 2 AM
-0 2 * * * cd /path/to/media-backup && /usr/bin/python3 backup.py
+Example scheduled task with custom config:
+```
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup-aws.ps1" -ConfigFile "C:\path\to\backup-config.json"
 ```
 
 ## Troubleshooting
 
-### "AWS CLI not found"
+### "aws: command not found"
 - Install AWS CLI: https://aws.amazon.com/cli/
 - Verify: `aws --version`
+- Restart PowerShell after installation
 
-### "Error reading config: No module named 'yaml'"
-- Install PyYAML: `pip install PyYAML`
-- Or convert config to JSON format
+### "cannot be loaded because running scripts is disabled on this system"
+- Run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
 ### "Unable to locate credentials"
 - Run: `aws configure`
-- Or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
+- Or set environment variables:
+  ```powershell
+  $env:AWS_ACCESS_KEY_ID = "your-key"
+  $env:AWS_SECRET_ACCESS_KEY = "your-secret"
+  ```
 
 ### Slow syncs or timeouts
 - Check your internet connection
-- Increase timeout using AWS CLI: `aws configure set default.s3.max_concurrent_requests 20`
-- Sync smaller batches of directories
+- Increase concurrent requests:
+  ```powershell
+  aws configure set default.s3.max_concurrent_requests 20
+  ```
 
 ## Performance Tips
 
 1. **Exclude unnecessary files** to reduce sync time:
-   ```yaml
-   exclude:
-     - "*.tmp"
-     - "*.log"
-     - ".git"
-     - "node_modules"
-     - "venv"
+   ```json
+   "exclude": [
+     "*.tmp",
+     "*.log",
+     ".git",
+     "node_modules",
+     "venv"
+   ]
    ```
 
 2. **First sync takes longer** - subsequent syncs only upload changed files
@@ -207,12 +217,8 @@ To see advanced options, check [AWS S3 sync documentation](https://docs.aws.amaz
 
 2. **Enable S3 bucket encryption**
 
-3. **Keep credentials in `~/.aws/credentials`** (never commit to git)
+3. **Keep credentials in `~\.aws\credentials`** (never commit to git)
 
 ## License
 
 MIT
-
-## Support
-
-For issues or questions, check the AWS CLI documentation or open an issue.
