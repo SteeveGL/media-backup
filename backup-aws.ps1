@@ -1,4 +1,4 @@
-# Pure AWS CLI backup script (PowerShell) - no Python required
+# AWS CLI backup script with automatic S3 bucket creation (PowerShell)
 # Only dependency: AWS CLI
 # Usage: .\backup-aws.ps1 [config-file]
 # Example: .\backup-aws.ps1 backup-config.json
@@ -36,11 +36,27 @@ if (-not $config.s3_bucket -or -not $config.backups) {
     exit 1
 }
 
+# Extract values from config with defaults
 $S3_BUCKET = $config.s3_bucket
+$Region = if ($config.region) { $config.region } else { "ca-central-1" }
+$CREDENTIALS_PROFILE = if ($config.backup_profile_name) { $config.backup_profile_name } else { "default" }
+$RetentionDays = if ($config.retention_days -ne $null) { $config.retention_days } else { 0 }
+$DaysToGlacier = if ($config.days_to_glacier -ne $null) { $config.days_to_glacier } else { 30 }
+$DaysToDeepArchive = if ($config.days_to_deep_archive -ne $null) { $config.days_to_deep_archive } else { 90 }
 $SKIP_ERRORS = $config.skip_errors -eq $true
 $Backups = $config.backups
 
-Write-Host "Starting backup to: s3://$S3_BUCKET"
+# Build AWS CLI profile parameter
+$profileParam = if ($CREDENTIALS_PROFILE -ne "default") { @("--profile", $CREDENTIALS_PROFILE) } else { @() }
+
+
+
+# Check and perform backups
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Media Backup Tool" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Backup destination: s3://$S3_BUCKET" -ForegroundColor Cyan
 Write-Host "Number of directories: $($Backups.Count)"
 Write-Host "------------------------------------------------------------"
 Write-Host ""
@@ -67,7 +83,7 @@ foreach ($backup in $Backups) {
     }
     
     # Run sync
-    & aws $cmd 2>&1
+    & aws @profileParam $cmd 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✓ Backup successful"
