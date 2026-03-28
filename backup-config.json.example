@@ -9,7 +9,7 @@
   "days_to_deep_archive": 90,
   "skip_errors": false,
   "schedule": {
-    "enabled": false,
+    "enabled": true,
     "task_name": "Media Backup",
     "frequency": "Daily",
     "hour": 2,
