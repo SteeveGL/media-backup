@@ -1,0 +1,37 @@
+{
+  "s3_bucket": "my-backup-bucket",
+  "region": "ca-central-1",
+  "aws_profile": "default",
+  "backup_profile_name": "backup-user",
+  "aws_account_id": "",
+  "retention_days": 0,
+  "days_to_glacier": 30,
+  "days_to_deep_archive": 90,
+  "skip_errors": false,
+  "schedule": {
+    "enabled": false,
+    "task_name": "Media Backup",
+    "frequency": "Daily",
+    "hour": 2,
+    "minute": 0,
+    "day_of_week": "Sunday"
+  },
+  "backups": [
+    {
+      "source": "/path/to/photos",
+      "destination": "photos",
+      "exclude": [
+        "*.tmp",
+        ".thumbs"
+      ]
+    },
+    {
+      "source": "/path/to/documents",
+      "destination": "docs",
+      "exclude": [
+        ".git",
+        "node_modules"
+      ]
+    }
+  ]
+}

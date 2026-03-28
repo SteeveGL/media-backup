@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AWS Credentials (NEVER commit these!)
+.aws/
+~/.aws/credentials
+aws_credentials
+
+# Local config variations
+backup-config.json
+
+# Logs
+*.log
