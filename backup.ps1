@@ -1,11 +1,20 @@
 ﻿# AWS CLI backup script with automatic S3 bucket creation (PowerShell)
 # Only dependency: AWS CLI
 # Usage: .\backup.ps1 [config-file]
-# Example: .\backup.ps1 backup-config.json
+# Default: Looks for backup-config.json in the same directory as this script
+# Example: .\backup.ps1 my-config.json
 
 param(
-    [string]$ConfigFile = "backup-config.json"
+    [string]$ConfigFile = ""
 )
+
+# Default to config file in same directory as script if not specified
+if (-not $ConfigFile) {
+    $ConfigFile = Join-Path $PSScriptRoot "backup-config.json"
+} elseif (-not [System.IO.Path]::IsPathRooted($ConfigFile)) {
+    # If relative path provided, make it relative to script directory
+    $ConfigFile = Join-Path $PSScriptRoot $ConfigFile
+}
 
 # Check if AWS CLI is installed
 try {
