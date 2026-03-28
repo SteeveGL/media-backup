@@ -43,7 +43,7 @@ region = ca-central-1
 2. **Run the script:**
    ```powershell
    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   .\create-scheduled-task.ps1
+   .\\scheduled-task.ps1
    ```
 
 3. **Examples (change in backup-config.json):**
@@ -104,9 +104,9 @@ region = ca-central-1
    - Program: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
    - Arguments:
      ```
-     -NoProfile -ExecutionPolicy RemoteSigned -WindowStyle Hidden -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; & 'C:\path\to\backup-aws.ps1'"
+     -NoProfile -ExecutionPolicy RemoteSigned -WindowStyle Hidden -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; & 'C:\path\to\backup.ps1'"
      ```
-   - Replace `C:\path\to\backup-aws.ps1` with actual path
+   - Replace `C:\path\to\backup.ps1` with actual path
 
 4. **Configure Settings:**
    - Check "Run with highest privileges"
@@ -121,7 +121,7 @@ The scheduled task runs under your user account with your stored AWS credentials
 ```
 Task Scheduler runs at 2 AM
     ↓
-PowerShell starts backup-aws.ps1
+PowerShell starts backup.ps1
     ↓
 Script reads backup-config.json
     ↓
@@ -197,21 +197,21 @@ aws s3 ls s3://your-bucket/ --recursive --human-readable --summarize
 
 ### Daily Backup at 2 AM
 ```powershell
-.\create-scheduled-task.ps1 -Frequency Daily -Hour 2
+.\scheduled-task.ps1 -Frequency Daily -Hour 2
 ```
 
 ### Weekly Backup (Sunday 11 PM)
 ```powershell
-.\create-scheduled-task.ps1 -Frequency Weekly -Hour 23 -DayOfWeek Sunday
+.\scheduled-task.ps1 -Frequency Weekly -Hour 23 -DayOfWeek Sunday
 ```
 
 ### Multiple Tasks (Daily + Weekly Full)
 ```powershell
 # Daily incremental
-.\create-scheduled-task.ps1 -TaskName "Backup Daily" -Frequency Daily -Hour 2
+.\scheduled-task.ps1 -TaskName "Backup Daily" -Frequency Daily -Hour 2
 
 # Weekly full backup
-.\create-scheduled-task.ps1 -TaskName "Backup Weekly" -Frequency Weekly -DayOfWeek Sunday -Hour 22
+.\scheduled-task.ps1 -TaskName "Backup Weekly" -Frequency Weekly -DayOfWeek Sunday -Hour 22
 ```
 
 ## Cost Optimization with Scheduled Backups
@@ -228,7 +228,7 @@ With archive tiering (configured in backup-config.json):
 
 1. **Run first backup manually** to verify it works:
    ```powershell
-   .\backup-aws.ps1
+   .\backup.ps1
    ```
 
 2. **Test scheduled task immediately:**

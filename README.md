@@ -39,62 +39,6 @@ A minimal PowerShell backup tool for syncing directories to AWS S3 using AWS CLI
 
 Just clone or download this repository. No additional dependencies needed beyond AWS CLI.
 
-## Setup: Create IAM User, Policy, and S3 Bucket
-
-For security, use a dedicated IAM user instead of root credentials.
-
-**Step 1**: Edit [backup-config.json](backup-config.json) with your settings:
-
-```json
-{
-  "s3_bucket": "steeve-media-backup",
-  "region": "ca-central-1",
-  "aws_profile": "default",
-  "backup_profile_name": "backup-user",
-  "retention_days": 0,
-  "days_to_glacier": 30,
-  "days_to_deep_archive": 90,
-  "skip_errors": false,
-  "backups": [
-    {
-      "source": "E:\\Photos",
-      "destination": "Photos",
-      "exclude": ["*.tmp", "Thumbs.db"]
-    }
-  ]
-}
-```
-
-**Configuration fields:**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `s3_bucket` | string | - | S3 bucket name (globally unique) |
-| `region` | string | ca-central-1 | AWS region (ca-central-1, us-east-1, etc.) |
-| `aws_profile` | string | (default) | AWS CLI profile to use for setup (for AWS SSO) |
-| `backup_profile_name` | string | backup-user | Profile name for saving credentials to ~/.aws/credentials |
-| `retention_days` | number | 0 | Days to keep files before deleting (0 = forever) |
-| `days_to_glacier` | number | 30 | Days before archiving to Glacier (80% cost reduction) |
-| `days_to_deep_archive` | number | 90 | Days before archiving to Deep Archive (99% cost reduction) |
-| `skip_errors` | boolean | false | Continue on backup errors |
-
-**Step 2**: Run backup (bucket auto-created on first run):
-
-```powershell
-.\backup-aws.ps1
-```
-
-**Auto-configured features:**
-- ✓ Block all public access
-- ✓ Server-side AES-256 encryption
-- ✓ Versioning (recover deleted files)
-- ✓ Access logging
-- ✓ Lifecycle policies (retention & archival)
-
-See [S3-SETUP.md](S3-SETUP.md) for details on retention options and AWS best practices.
-
-See [IAM-SETUP.md](IAM-SETUP.md) for security details about the IAM user and least-privilege access.
-
 ## Usage
 
 ### 1. Create AWS Resources (Run as Administrator)
@@ -149,7 +93,7 @@ All configuration is in [backup-config.json](backup-config.json):
 ### 3. Run backups
 
 ```powershell
-.\backup-aws.ps1
+.\backup.ps1
 ```
 
 ### 4. Verify results
@@ -177,42 +121,7 @@ Completed: 2 successful, 0 failed
 
 ## Schedule Automatic Backups
 
-Run backups automatically on a schedule using Windows Task Scheduler:
-
-### Quick Setup
-1. **Edit `backup-config.json`** and configure the schedule section:
-   ```json
-   "schedule": {
-     "task_name": "Media Backup",
-     "frequency": "Daily",
-     "hour": 2,
-     "minute": 0,
-     "day_of_week": "Sunday"
-   }
-   ```
-
-2. **Create the scheduled task:**
-   ```powershell
-   .\create-scheduled-task.ps1
-   ```
-
-3. **Test immediately:**
-   ```powershell
-   Start-ScheduledTask -TaskName "Media Backup"
-   ```
-
-### Schedule Examples
-- **Daily at 2 AM:** `"frequency": "Daily", "hour": 2`
-- **Weekly on Sunday at 11 PM:** `"frequency": "Weekly", "hour": 23, "day_of_week": "Sunday"`
-- **Monthly at 1:30 AM:** `"frequency": "Monthly", "hour": 1, "minute": 30`
-
-See [SCHEDULING.md](SCHEDULING.md) for full documentation.
-
-**See [SCHEDULING.md](SCHEDULING.md) for details** on:
-- Setting up scheduled tasks
-- Monitoring backups
-- Troubleshooting credentials
-- Multiple backup schedules
+To set up automatic recurring backups using Windows Task Scheduler, see [SCHEDULING.md](SCHEDULING.md) for complete setup instructions and configuration options.
 
 ## Configuration
 
@@ -248,77 +157,20 @@ See [SCHEDULING.md](SCHEDULING.md) for full documentation.
 | `destination` | string | Yes | S3 key/path (no leading slash) |
 | `exclude` | array | No | Glob patterns to exclude from sync |
 
-## Retention Strategies
+## Cost Optimization & Retention
 
-### Forever (retention_days: 0) - **Recommended for archives**
-- ✓ Keeps all files forever
-- ✓ Multi-tier archiving for cost efficiency:
-  - **0-30 days**: Standard storage (default)
-  - **30-90 days**: Glacier (80% cost reduction, default)
-  - **90+ days**: Deep Archive (99% cost reduction, default)
-- **Cost**: ~$0.001/GB/month after 90 days vs $0.023/GB with Standard
-- **Best for**: Important long-term backups, cold storage
-- **Customize**: Adjust `days_to_glacier` and `days_to_deep_archive` in config
-
-Example (archive faster):
-```json
-{
-  "retention_days": 0,
-  "days_to_glacier": 7,
-  "days_to_deep_archive": 30
-}
-```
-
-### Delete After Days (retention_days: 90) - **For recent backups**
-- ✓ Keeps files for specified days, then deletes
-- ✓ Automatically archives with tiering:
-  - **0-30 days**: Standard storage
-  - **30-90 days**: Glacier (80% cost reduction)
-  - **90+ days**: Deep Archive (99% cost reduction)
-  - **After retention_days**: Permanently deleted
-- **Cost**: Minimal after retention period
-- **Best for**: Recent backup retention, automatic cleanup
-- **Customize**: Set `days_to_glacier`, `days_to_deep_archive`, `retention_days`
-
-Example (keep 180 days with custom archiving):
-```json
-{
-  "retention_days": 180,
-  "days_to_glacier": 30,
-  "days_to_deep_archive": 90
-}
-```
-
-## AWS S3 Storage Classes & Cost Savings
-
-The script uses **intelligent tiering** to minimize costs:
-
-| Storage Class | Cost/GB/Month | Speed | Use Case |
-|---------------|---------------|-------|----------|
-| **Standard** | $0.023 | Immediate | Recent backups (0-30 days) |
-| **Glacier Instant** | $0.004 | 1-3 hours | Medium-term (30-90 days) |
-| **Deep Archive** | $0.00099 | 12 hours | Long-term (90+ days) |
-
-### Cost Example (1 TB of backup data)
-```
-Standard storage only:        $23/month
-With tiering (months 1-3):    ~$20/month
-With tiering (month 4+):      ~$1/month (97% cheaper!)
-```
-
-### How It Works
-1. **First 30 days**: Files in Standard (fast access for recent backups)
-2. **30-90 days**: Moved to Glacier automatically (80% cost reduction)
-3. **90+ days**: Moved to Deep Archive automatically (99% cost reduction)
-
-**Note:** Retrieval from Deep Archive takes 12 hours but costs $0. You only pay for storage.
+See [S3-SETUP.md](S3-SETUP.md) for detailed information on:
+- **Retention strategies** (keep forever vs. delete after days)
+- **Multi-tier archiving** (Glacier, Deep Archive cost savings)
+- **Storage class comparison** and pricing
+- **Cost examples** (save 97% after 90 days)
 
 ## AWS CLI Options
 
 The tool uses `aws s3 sync` with these defaults:
 - `--delete`: Removes files from S3 that are no longer in the local directory
 
-To add advanced options, edit [backup-aws.ps1](backup-aws.ps1) line that builds the `$cmd` array.
+To add advanced options, edit [backup.ps1](backup.ps1) line that builds the `$cmd` array.
 
 Check [AWS S3 sync documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html#using-s3-commands-managing-objects-sync) for more options.
 
@@ -331,12 +183,12 @@ Check [AWS S3 sync documentation](https://docs.aws.amazon.com/cli/latest/usergui
 3. Set trigger (e.g., daily at 2 AM)
 4. Action: Start a program
    - Program: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
-   - Arguments: `-NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup-aws.ps1"`
+   - Arguments: `-NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup.ps1"`
    - Start in: `C:\path\to\media-backup`
 
 Example scheduled task with custom config:
 ```
-powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup-aws.ps1" -ConfigFile "C:\path\to\backup-config.json"
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "C:\path\to\backup.ps1" -ConfigFile "C:\path\to\backup-config.json"
 ```
 
 ## Troubleshooting

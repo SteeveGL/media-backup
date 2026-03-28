@@ -1,33 +1,25 @@
 # S3 Bucket Setup Guide
 
-This guide explains how to create and configure your S3 bucket with AWS best practices using the `setup-s3-bucket.ps1` script.
+This guide explains how to create and configure your S3 bucket with AWS best practices using the `setup-s3-iam.ps1` script.
 
 ## Quick Start
 
 ```powershell
-# Run with minimum config
-.\setup-s3-bucket.ps1 -BucketName "my-media-backup"
-
-# Run with retention policy (keep for 90 days, then delete)
-.\setup-s3-bucket.ps1 -BucketName "my-media-backup" -RetentionDays 90 -Region "ca-central-1"
-
-# Run with custom tags
-$tags = @{
-    Environment = "Production"
-    Owner = "YourName"
-    CostCenter = "IT"
-}
-.\setup-s3-bucket.ps1 -BucketName "my-media-backup" -Tags $tags -Region "ca-central-1"
+# Run setup (uses configuration from backup-config.json)
+.\setup-s3-iam.ps1
 ```
 
-## Parameters
+## Configuration
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `BucketName` | string | Required | S3 bucket name (globally unique, 3-63 chars, lowercase) |
-| `RetentionDays` | int | 0 | Days to keep files before deleting (0 = forever) |
-| `Region` | string | ca-central-1 | AWS region (us-east-1, us-west-2, eu-west-1, etc.) |
-| `Tags` | hashtable | default | Custom tags for organization and cost tracking |
+All settings are in [backup-config.json](backup-config.json):
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `s3_bucket` | string | - | S3 bucket name (globally unique, 3-63 chars, lowercase) |
+| `retention_days` | int | 0 | Days to keep files before deleting (0 = forever) |
+| `region` | string | ca-central-1 | AWS region (us-east-1, us-west-2, eu-west-1, etc.) |
+| `days_to_glacier` | int | 30 | Days before archiving to Glacier (80% cost reduction) |
+| `days_to_deep_archive` | int | 90 | Days before archiving to Deep Archive (99% cost reduction) |
 
 ## S3 Bucket Name Rules
 
@@ -204,7 +196,7 @@ aws s3 ls s3://my-media-backup --recursive --summarize --human-readable
 
 2. **Run Your First Backup**
    ```powershell
-   .\backup-aws.ps1
+   .\backup.ps1
    ```
 
 3. **Verify Upload**

@@ -27,7 +27,7 @@ $config = Get-Content $ConfigFile | ConvertFrom-Json
 $S3_BUCKET = $config.s3_bucket
 $Region = if ($config.region) { $config.region } else { "ca-central-1" }
 $AWS_PROFILE = if ($config.aws_profile) { $config.aws_profile } else { "default" }
-$BACKUP_PROFILE_NAME = if ($config.backup_profile_name) { $config.backup_profile_name } else { "backup-user" }
+$BACKUP_PROFILE_NAME = if ($config.credentials_profile_name) { $config.credentials_profile_name } else { if ($config.backup_profile_name) { $config.backup_profile_name } else { "backup-user" } }
 $DaysToGlacier = if ($config.days_to_glacier -ne $null) { $config.days_to_glacier } else { 30 }
 $DaysToDeepArchive = if ($config.days_to_deep_archive -ne $null) { $config.days_to_deep_archive } else { 90 }
 $RetentionDays = if ($config.retention_days -ne $null) { $config.retention_days } else { 0 }
@@ -82,12 +82,13 @@ $policy = @{
     )
 } | ConvertTo-Json -Depth 10
 
-# Save policy to temp file
+# Save policy to temp file (without BOM for AWS CLI compatibility)
 $policyFile = [System.IO.Path]::GetTempFileName()
-$policy | Out-File $policyFile -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($policyFile, $policy, $utf8NoBom)
 
-# Put user policy
-aws @profileParam iam put-user-policy --user-name $IAM_USER --policy-name $POLICY_NAME --policy-document (Get-Content $policyFile -Raw) 2>&1 | Out-Null
+# Put user policy using file:// prefix for reliable JSON parsing
+aws @profileParam iam put-user-policy --user-name $IAM_USER --policy-name $POLICY_NAME --policy-document "file://$policyFile" 2>&1 | Out-Null
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "[OK] Policy attached" -ForegroundColor Green
@@ -102,11 +103,52 @@ Write-Host ""
 # Create access keys
 Write-Host "[3/4] Creating access keys" -ForegroundColor Yellow
 
-$keys = aws @profileParam iam create-access-key --user-name $IAM_USER | ConvertFrom-Json
-$AccessKeyId = $keys.AccessKey.AccessKeyId
-$SecretAccessKey = $keys.AccessKey.SecretAccessKey
+# Check if user already has max access keys (2)
+$existingKeys = aws @profileParam iam list-access-keys --user-name $IAM_USER | ConvertFrom-Json
+$keyCount = $existingKeys.AccessKeyMetadata.Count
+if ($keyCount -ge 2) {
+    Write-Host "Note: User already has $keyCount access key(s). Deleting oldest one..." -ForegroundColor Yellow
+    
+    # Find and delete the oldest key
+    $oldestKey = $existingKeys.AccessKeyMetadata | Sort-Object CreateDate | Select-Object -First 1
+    $oldKeyId = $oldestKey.AccessKeyId
+    
+    Write-Host "Deleting old key: $oldKeyId" -ForegroundColor Yellow
+    aws @profileParam iam delete-access-key --user-name $IAM_USER --access-key-id $oldKeyId 2>&1 | Out-Null
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Old access key deleted" -ForegroundColor Green
+    } else {
+        Write-Host "[WARNING] Failed to delete old access key" -ForegroundColor Yellow
+    }
+}
 
-Write-Host "[OK] Access keys created" -ForegroundColor Green
+# Now create new access key
+$keyOutput = aws @profileParam iam create-access-key --user-name $IAM_USER 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Failed to create access keys" -ForegroundColor Red
+    if ($keyOutput -match "Cannot exceed quota for AccessKeysPerUser") {
+        Write-Host ""
+        Write-Host "SOLUTION: Unable to manage access keys automatically" -ForegroundColor Yellow
+        Write-Host "You need to manually delete an old access key first:" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  1. List current keys:" -ForegroundColor Cyan
+        Write-Host "     aws @profileParam iam list-access-keys --user-name $IAM_USER" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  2. Delete an old key:" -ForegroundColor Cyan
+        Write-Host "     aws @profileParam iam delete-access-key --user-name $IAM_USER --access-key-id <KEY_ID>" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  3. Then re-run this script" -ForegroundColor Cyan
+        Write-Host ""
+    }
+    $AccessKeyId = ""
+    $SecretAccessKey = ""
+} else {
+    $keys = $keyOutput | ConvertFrom-Json
+    $AccessKeyId = $keys.AccessKey.AccessKeyId
+    $SecretAccessKey = $keys.AccessKey.SecretAccessKey
+    Write-Host "[OK] Access keys created" -ForegroundColor Green
+}
 Write-Host ""
 
 # Configure AWS CLI credentials locally
@@ -117,28 +159,34 @@ if (-not (Test-Path $awsDir)) {
 }
 
 $credentialsFile = Join-Path $awsDir "credentials"
-$configFile = Join-Path $awsDir "config"
 
-# Write credentials file
-$credentialsContent = @"
+# Write credentials file (append to preserve other profiles)
+if ($AccessKeyId -and $SecretAccessKey) {
+    # Only update if we have valid keys (access key creation may have failed)
+    if (Test-Path $credentialsFile) {
+        # Remove old profile section if it exists
+        $content = Get-Content $credentialsFile -Raw
+        $content = $content -replace "(?s)\[$BACKUP_PROFILE_NAME\](.*?)(?=\r?\n\[|\r?\n$|$)", ""
+        $content = $content.TrimEnd()
+    } else {
+        $content = ""
+    }
+    
+    # Append new profile
+    $credentialsContent = @"
 [$BACKUP_PROFILE_NAME]
 aws_access_key_id = $AccessKeyId
 aws_secret_access_key = $SecretAccessKey
 "@
-
-$credentialsContent | Out-File $credentialsFile -Encoding UTF8 -Force
-Write-Host "[OK] Credentials saved to: $credentialsFile" -ForegroundColor Green
-Write-Host "    Profile name: [$BACKUP_PROFILE_NAME]" -ForegroundColor Green
-
-# Write config file if it doesn't exist
-if (-not (Test-Path $configFile)) {
-    $configContent = @"
-[default]
-region = $Region
-output = json
-"@
-    $configContent | Out-File $configFile -Encoding UTF8 -Force
-    Write-Host "[OK] Config saved to: $configFile" -ForegroundColor Green
+    
+    if ($content) { $content += "`n`n" }
+    $content += $credentialsContent.Trim()
+    $content | Out-File $credentialsFile -Encoding ASCII -Force
+    Write-Host "[OK] Credentials saved to: $credentialsFile" -ForegroundColor Green
+    Write-Host "    Profile name: [$BACKUP_PROFILE_NAME]" -ForegroundColor Green
+} else {
+    Write-Host "[WARNING] Access key creation failed - credentials not updated" -ForegroundColor Yellow
+    Write-Host "    You may need to manually manage access keys via AWS Console" -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -218,15 +266,19 @@ Write-Host ""
 Write-Host "AWS Credentials configured:" -ForegroundColor Yellow
 Write-Host "  Profile: [$BACKUP_PROFILE_NAME]" -ForegroundColor Cyan
 Write-Host "  File: $credentialsFile" -ForegroundColor Cyan
-Write-Host "  Access Key: $AccessKeyId" -ForegroundColor Cyan
+if ($AccessKeyId) {
+    # Show masked access key for security
+    $maskedKey = $AccessKeyId.Substring(0, 4) + "*" * ($AccessKeyId.Length - 8) + $AccessKeyId.Substring($AccessKeyId.Length - 4)
+    Write-Host "  Access Key: $maskedKey" -ForegroundColor Cyan
+} else {
+    Write-Host "  Access Key: [FAILED - AWS quota exceeded]" -ForegroundColor Red
+    Write-Host "    → Delete unused access keys from AWS Console" -ForegroundColor Yellow
+    Write-Host "    → Then re-run this script" -ForegroundColor Yellow
+}
 Write-Host ""
 Write-Host "AWS Account:" -ForegroundColor Yellow
 Write-Host "  Account ID: $AWS_ACCOUNT_ID" -ForegroundColor Cyan
 Write-Host "  Profile: $AWS_PROFILE" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "AWS Config:" -ForegroundColor Yellow
-Write-Host "  File: $configFile" -ForegroundColor Cyan
-Write-Host "  Region: $Region" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Bucket Details:" -ForegroundColor Yellow
 Write-Host "  Name: $S3_BUCKET" -ForegroundColor Cyan
@@ -242,6 +294,6 @@ Write-Host "Ready to use!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Customize directories in backup-config.json" -ForegroundColor Cyan
-Write-Host "  2. Run: .\backup-aws.ps1" -ForegroundColor Cyan
+Write-Host "  2. Run: .\backup.ps1" -ForegroundColor Cyan
 Write-Host "  3. Schedule: .\create-scheduled-task.ps1 (run as admin)" -ForegroundColor Cyan
 Write-Host ""

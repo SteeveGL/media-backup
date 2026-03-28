@@ -6,11 +6,11 @@ Write-Host "Create Scheduled Backup Task" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$ScriptPath = Join-Path $PSScriptRoot "backup-aws.ps1"
+$ScriptPath = Join-Path $PSScriptRoot "backup.ps1"
 $ConfigPath = Join-Path $PSScriptRoot "backup-config.json"
 
 if (-not (Test-Path $ScriptPath)) {
-    Write-Host "Error: backup-aws.ps1 not found" -ForegroundColor Red
+    Write-Host "Error: backup.ps1 not found" -ForegroundColor Red
     exit 1
 }
 

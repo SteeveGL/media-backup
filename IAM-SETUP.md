@@ -73,7 +73,7 @@ Done! The script automatically:
 - Writes credentials to `~/.aws/credentials` under the specified profile
 - Configures AWS CLI
 
-You're ready to use `.\backup-aws.ps1` immediately!
+You're ready to use `./backup.ps1` immediately!
 
 ## Security Features
 
@@ -197,9 +197,9 @@ The setup script detects existing buckets and configures them. Just re-run setup
 
 After setup:
 1. Customize: Edit `backup-config.json` with your directories
-2. Test: Run `.\backup-aws.ps1` manually
+2. Test: Run `./backup.ps1` manually
 3. Verify: Check S3 console or run `aws s3 ls`
-4. Schedule: Run `.\create-scheduled-task.ps1` to automate
+4. Schedule: Run `./scheduled-task.ps1` to automate
 
 ## References
 
